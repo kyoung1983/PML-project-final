@@ -1,0 +1,112 @@
+---
+title: "Machine Learning Course Project"
+output: word_document
+---
+
+This report attempts to predict type of exercise based on a total of 157 possible predictor variables.  
+
+
+
+```{r, echo=FALSE}
+library(caret)
+library(rpart)
+library(rattle)
+library(randomForest)
+set.seed(123)
+pml.training <- read.csv("~/Desktop/courseraR/pml-training.csv")
+```
+
+
+Next, an examination of the predictor variables was made to determine which could easily be excluded from the model based on having no variation. From this we can remove 60 of the variables. Based on this information we then create a new training data set that removes these variables, leaving 97 possible predictors. 
+
+```{r}
+nzv <- nearZeroVar(pml.training)
+filterPML.training <-pml.training[,-nzv]
+dim(filterPML.training)
+```
+
+The first variable is useless as it is just an ID number, so is the name of the person so we want to remove these. 
+
+```{r}
+MyTraining <- filterPML.training[c(-1)]
+```
+```{r}
+MyTraining <- MyTraining[c(-1)]
+dim(MyTraining)
+```
+
+We also need to remove the NA values. We set a threshold of 50% - if more than 50% of the column includes NA values we want to remove them from the possible set of predictors. 
+
+```{r}
+trainingNoNA <- MyTraining
+```
+```{r}
+for(i in 1:length(MyTraining)) {
+  if( sum( is.na( MyTraining[, i] ) ) /nrow(MyTraining) >= .5 ) {
+    for(j in 1:length(trainingNoNA)) {
+      if( length( grep(names(MyTraining[i]), names(trainingNoNA)[j]) ) ==1) {
+        trainingNoNA <- trainingNoNA[ , -j]
+      }   
+    } 
+  }
+}
+```
+```{r}
+dim(trainingNoNA)
+```
+
+Now we have a possible 56 predictors (57-our classe variable to be predicted). 
+
+Because the testing set is reserved for the ultimate course test, we split the training data into a training and testing set that we can use. 
+
+```{r}
+inTrain <- createDataPartition(y=trainingNoNA$classe, p=0.6, list=FALSE)
+pmlTraining <- trainingNoNA[inTrain, ]
+pmlTesting <- trainingNoNA[-inTrain, ]
+dim(pmlTraining); dim(pmlTesting)
+```
+
+
+The first model we want to examine is a Tree as this is a simple and powerful method that allows for easy interpreation. 
+```{r}
+modeltree <- train(classe~.,data=pmlTraining, method = "rpart")
+fancyRpartPlot(modeltree$finalModel)
+```
+
+Then we want to look at how well it predicts the testing data we created
+```{r}
+predicttree <- predict(modeltree, pmlTesting)
+confusionMatrix(predicttree, pmlTesting$classe)
+```
+
+This model is not very accurate - only 62%. We should try a different approach, so the next model we use is a random forrest model as this model tends to be more accurate than a simple tree. 
+
+```{r}
+modelrf <- randomForest(classe~.,data=pmlTraining)
+```
+
+And now for how well it predicts
+
+```{r}
+predictrf<- predict(modelrf, pmlTesting)
+confusionMatrix(predictrf, pmlTesting$classe)
+```
+
+This is much better, with an accuracy of 99%. This is therefore the model we will use to predict the provided test data for the assignment. 
+
+We need the test data to have the same columns as the training data, so next we make sure the data sets have the same variables/columns
+
+```{r}
+pml.testing <- read.csv("~/Desktop/courseraR/pml-testing.csv")
+columnsused <- colnames(pmlTraining[,-57])
+ClassTesting <- pml.testing[columnsused]
+dim(ClassTesting)
+```
+
+Now we predict the test data (note that I gave up getting random forrest to predict. I spent hours searching but could never get past the error "Type of predictors in the new data do not match that of the training data" so the results below are from the poorer tree model)
+```{r}
+predictTest <- predict(modeltree, ClassTesting)
+predictTest
+```
+
+A final note on error: The out of sample error rate, or generalization error, is the error set you get on a new data set. This will usually be higher than the in sample error rate due to some overfitting. In the tree model the out of sample error was 1-0.62 = 0.38, not very good. In the random forrest model the out of sample error was 1-0.99 = 0.01, a very good error rate and thus one reason we selected this model as the final model. 
